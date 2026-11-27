@@ -254,9 +254,9 @@ def plot_confusion_matrix(m: dict[str, Any]):
     for r in range(2):
         for c in range(2):
             bg_val = mat[r, c] / max(mat.max(), 1)
-            txt_color = "#0b1020" if bg_val > 0.55 else "#f8fafc"
+            txt_color = "#f8fafc" if bg_val > 0.55 else "#0f172a"
             if r == 1 and c == 0:
-                txt_color = "#fb7185" if bg_val <= 0.55 else "#7f1d1d"
+                txt_color = "#ffe4e6" if bg_val > 0.55 else "#be123c"
             ax.text(c, r, labels_txt[r][c], ha="center", va="center", color=txt_color, fontweight="bold", fontsize=10)
     for spine in ax.spines.values():
         spine.set_edgecolor("#334155")
@@ -340,10 +340,62 @@ def render_app() -> None:
     )
     init_state()
 
+    st.markdown(
+        """
+        <style>
+        .block-container { padding-top: 2rem; padding-bottom: 2rem; }
+        .kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(6, minmax(0, 1fr));
+            gap: 10px;
+            margin: 8px 0 14px;
+        }
+        @media (max-width: 1024px) {
+            .kpi-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+        }
+        @media (max-width: 640px) {
+            .block-container { padding-top: 1.2rem; padding-left: 0.9rem; padding-right: 0.9rem; }
+            .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+        }
+        .kpi-card {
+            background: #161b26;
+            border: 1px solid #2b354b;
+            border-radius: 10px;
+            padding: 10px 12px;
+        }
+        .kpi-lbl {
+            font-size: 0.74rem;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+            font-weight: 600;
+        }
+        .kpi-val {
+            font-size: 1.55rem;
+            font-weight: 700;
+            line-height: 1.2;
+            margin: 3px 0 2px;
+            font-variant-numeric: tabular-nums;
+            color: #f8fafc;
+        }
+        .kpi-val.accent { color: #38bdf8; }
+        .kpi-val.good { color: #4ade80; }
+        .kpi-val.bad { color: #fb7185; }
+        .kpi-val.warn { color: #fbbf24; }
+        .kpi-sub {
+            font-size: 0.73rem;
+            color: #94a3b8;
+            line-height: 1.25;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
     st.title("🛡️ Lab Interativo — Demo 1: Detector de URLs Maliciosas")
     st.caption(
         "Baseado na Aula 1 (MBA Cyber Security — FIAP). "
-        "Passe o mouse nos ícones `?` ao lado de cada controle e métrica para ver explicações curtas."
+        "No celular, toque em `>>` no canto superior esquerdo para abrir todos os parâmetros."
     )
 
     p1, p2, p3, p4 = st.columns([1.2, 1.3, 1.5, 1.2])
@@ -501,13 +553,43 @@ def render_app() -> None:
         })
         st.session_state.history = st.session_state.history[:12]
 
-    k1, k2, k3, k4, k5, k6 = st.columns(6)
-    k1.metric("Acurácia", f"{m['accuracy']:.1%}", f"Baseline: {base['accuracy']:.1%}", help="Total de acertos / tudo. Dizer 'legítimo' para tudo já dá ~85%!")
-    k2.metric("Recall", f"{m['recall']:.1%}", help="Dos ataques reais no teste, quantos % o modelo pegou.")
-    k3.metric("Precision", f"{m['precision']:.1%}", help="Dos alertas disparados, quantos % eram ataque real.")
-    k4.metric("F1-Score", f"{m['f1']:.1%}", help="Média harmônica entre Precision e Recall.")
-    k5.metric("Passaram (FN)", f"{m['fn']:,}", help="Ataques reais que o modelo liberou por engano.")
-    k6.metric("Falsos (FP)", f"{m['fp']:,}", help="Sites legítimos bloqueados por engano.")
+    st.markdown(
+        f"""
+        <div class="kpi-grid">
+          <div class="kpi-card" title="Total de acertos / tudo. Dizer 'legítimo' para tudo já dá ~85%!">
+            <div class="kpi-lbl">Acurácia</div>
+            <div class="kpi-val accent">{m['accuracy']:.1%}</div>
+            <div class="kpi-sub">Baseline preguiçoso: {base['accuracy']:.1%}</div>
+          </div>
+          <div class="kpi-card" title="Dos ataques reais no teste, quantos % o modelo conseguiu pegar.">
+            <div class="kpi-lbl">Recall</div>
+            <div class="kpi-val good">{m['recall']:.1%}</div>
+            <div class="kpi-sub">Ataques reais pegos</div>
+          </div>
+          <div class="kpi-card" title="Dos alertas disparados, quantos % eram ataque de verdade.">
+            <div class="kpi-lbl">Precision</div>
+            <div class="kpi-val">{m['precision']:.1%}</div>
+            <div class="kpi-sub">Alertas que eram reais</div>
+          </div>
+          <div class="kpi-card" title="Média harmônica entre Precision e Recall.">
+            <div class="kpi-lbl">F1-Score</div>
+            <div class="kpi-val">{m['f1']:.1%}</div>
+            <div class="kpi-sub">Equilíbrio Prec × Rec</div>
+          </div>
+          <div class="kpi-card" title="Ataques reais que o modelo liberou por engano (Falsos Negativos).">
+            <div class="kpi-lbl">Passaram (FN)</div>
+            <div class="kpi-val bad">{m['fn']:,}</div>
+            <div class="kpi-sub">Ataques não detectados</div>
+          </div>
+          <div class="kpi-card" title="Sites legítimos bloqueados por engano (Falsos Positivos).">
+            <div class="kpi-lbl">Falsos (FP)</div>
+            <div class="kpi-val warn">{m['fp']:,}</div>
+            <div class="kpi-sub">Alarmes falsos no SOC</div>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
     notes = []
     warn = False
