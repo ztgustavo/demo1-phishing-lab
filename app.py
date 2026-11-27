@@ -389,6 +389,33 @@ def render_app() -> None:
             color: #94a3b8;
             line-height: 1.25;
         }
+        .gloss-grid {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 8px;
+            margin: 6px 0 12px;
+        }
+        @media (max-width: 1024px) {
+            .gloss-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        }
+        @media (max-width: 520px) {
+            .gloss-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+        }
+        .gloss-card {
+            background: #131b2e;
+            border: 1px solid #263554;
+            border-radius: 9px;
+            padding: 8px 10px;
+            font-size: 0.78rem;
+            line-height: 1.32;
+            color: #cbd5e1;
+        }
+        .gloss-card strong {
+            color: #38bdf8;
+            display: block;
+            margin-bottom: 2px;
+            font-size: 0.8rem;
+        }
         </style>
         """,
         unsafe_allow_html=True,
@@ -450,16 +477,21 @@ def render_app() -> None:
         show_glossary = st.toggle("Glossário Rápido", value=False, help="Mostra um resumo dos 8 termos principais usados nesta demo.")
 
     if show_glossary:
-        g1, g2, g3, g4 = st.columns(4)
-        g1.info("**Acurácia**\n\n% de acertos totais. Engana em bases desbalanceadas (dizer 'legítimo' para tudo já acerta ~85%).")
-        g2.info("**Recall**\n\nDos ataques reais, quantos o alarme pegou. Métrica mais crítica em cibersegurança.")
-        g3.info("**Precision**\n\nDos alertas emitidos, quantos eram ataque real. Mede o ruído (falsos positivos) no SOC.")
-        g4.info("**Limiar (Threshold)**\n\nNota de corte (0 a 1). Acima bloqueia; abaixo libera. Controla o trade-off Recall × FP.")
-        g5, g6, g7, g8 = st.columns(4)
-        g5.info("**Falso Negativo (FN)**\n\nAtaque real liberado como legítimo (o alarme não tocou com o ladrão dentro).")
-        g6.info("**Falso Positivo (FP)**\n\nSite legítimo bloqueado por engano (alarme tocou à toa).")
-        g7.info("**TF-IDF**\n\nTransforma texto em números, dando peso maior a palavras/pedaços raros e distintivos.")
-        g8.info("**Regressão Logística**\n\nModelo transparente que soma pesos de cada pedaço da URL para calcular o risco (0–100%).")
+        st.markdown(
+            """
+            <div class="gloss-grid">
+              <div class="gloss-card"><strong>Acurácia</strong>% de acertos totais. Engana em base desbalanceada (dizer "legítimo" para tudo já dá ~85%).</div>
+              <div class="gloss-card"><strong>Recall</strong>Dos ataques reais, quantos o alarme pegou. Métrica mais crítica em segurança.</div>
+              <div class="gloss-card"><strong>Precision</strong>Dos alertas emitidos, quantos eram ataque real. Mede o ruído (falsos positivos) no SOC.</div>
+              <div class="gloss-card"><strong>Limiar (Threshold)</strong>Nota de corte (0 a 1). Acima bloqueia; abaixo libera. Controla o trade-off Recall × FP.</div>
+              <div class="gloss-card"><strong>Falso Negativo (FN)</strong>Ataque real liberado como legítimo (o alarme não tocou com o ladrão dentro).</div>
+              <div class="gloss-card"><strong>Falso Positivo (FP)</strong>Site legítimo bloqueado por engano (alarme tocou à toa).</div>
+              <div class="gloss-card"><strong>TF-IDF</strong>Converte texto da URL em números, dando peso maior a pedaços raros e distintivos.</div>
+              <div class="gloss-card"><strong>Regressão Logística</strong>Modelo transparente que soma pesos de cada pedaço para calcular o risco (0–100%).</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
     # Painel de parâmetros direto na página principal (visível e fácil de usar no celular e no desktop!)
     with st.expander("⚙️ Personalizar Parâmetros (Dados, TF-IDF e Regressão Logística)", expanded=False):
@@ -584,14 +616,19 @@ def render_app() -> None:
     sig = (sample_size, clean_url, dedup, stratify, test_size, seed, analyzer, ngram_min, ngram_max, max_features, sublinear_tf, balanced, c_val)
     if st.session_state.last_sig != sig:
         st.session_state.last_sig = sig
+        flags = []
+        if not dedup:
+            flags.append("sem dedup")
+        if not clean_url:
+            flags.append("sem limpeza")
+        flag_txt = (" · " + ", ".join(flags)) if flags else ""
         st.session_state.history.insert(0, {
-            "Configuração": f"{analyzer} ({ngram_min}-{ngram_max}) | {'balanced' if balanced else 'padrão'} | C={c_val} | {sample_size//1000}k",
-            "Vocab": result["vocab_size"],
-            "Acurácia": f"{m['accuracy']:.1%}",
+            "Config": f"{analyzer} ({ngram_min}-{ngram_max}) · {'bal' if balanced else 'padrão'} · {sample_size//1000}k{flag_txt}",
+            "Acur.": f"{m['accuracy']:.1%}",
             "Recall": f"{m['recall']:.1%}",
-            "Precision": f"{m['precision']:.1%}",
-            "FN (passaram)": m["fn"],
-            "FP (falsos)": m["fp"],
+            "Prec.": f"{m['precision']:.1%}",
+            "FN": m["fn"],
+            "FP": m["fp"],
         })
         st.session_state.history = st.session_state.history[:12]
 
@@ -634,16 +671,23 @@ def render_app() -> None:
         unsafe_allow_html=True,
     )
 
-    # Leitura didática automática
+    # Leitura didática automática (contextual aos parâmetros ativos)
     notes = []
     warn = False
     if not dedup:
         notes.append("Você desligou a remoção de duplicatas — URLs repetidas podem cair no treino e no teste ('cola na prova').")
         warn = True
     if m["recall"] < 0.85:
+        dicas = []
+        if not balanced:
+            dicas.append('ativar `class_weight="balanced"`')
+        if analyzer == "word":
+            dicas.append("mudar o analisador para `char (2–4)`")
+        if threshold > 0.30:
+            dicas.append("baixar o limiar")
+        dica_txt = (" Tente " + ", ".join(dicas[:-1]) + (" ou " + dicas[-1] if len(dicas) > 1 else dicas[0]) + ".") if dicas else ""
         notes.append(
-            f"Recall em **{m['recall']:.1%}**: **{m['fn']:,}** ataques passaram direto mesmo com acurácia de **{m['accuracy']:.1%}**. "
-            "Tente ativar `class_weight=\"balanced\"`, mudar para `char (2–4)` ou baixar o limiar."
+            f"Recall em **{m['recall']:.1%}**: **{m['fn']:,}** ataques passaram direto mesmo com acurácia de **{m['accuracy']:.1%}**.{dica_txt}"
         )
         warn = True
     elif m["precision"] < 0.70:
@@ -717,9 +761,15 @@ def render_app() -> None:
         for url, real in PRESET_URLS:
             c = limpar_url(url) if clean_url else url
             p = float(result["modelo"].predict_proba(result["vec"].transform([c]))[0, 1])
-            ver = "BLOQUEAR" if p >= threshold else "LIBERAR"
-            ok = (ver == "BLOQUEAR") == (real == "maliciosa")
-            rows.append({"URL": url, "Realidade": real, "Risco": f"{p:.1%}", "Decisão": ver, "Acertou?": "sim" if ok else "NÃO"})
+            ver = "🚫 Bloquear" if p >= threshold else "✅ Liberar"
+            ok = (p >= threshold) == (real == "maliciosa")
+            rows.append({
+                "URL": url,
+                "Real": "Maliciosa" if real == "maliciosa" else "Legítima",
+                "Risco": f"{p:.0%}",
+                "Decisão": ver,
+                "OK": "✅" if ok else "❌",
+            })
         st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
 
     st.subheader("Histórico de Experimentos (sua sessão)")
