@@ -162,12 +162,14 @@ def train_model_cached(
     probs_test = modelo.predict_proba(X_te)[:, 1]
     m_dummy = compute_metrics(y_test, np.zeros_like(y_test))
 
+    # Curva de trade-off
     thresholds = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95]
     curve = []
     for t in thresholds:
         mt = compute_metrics(y_test, (probs_test >= t).astype(int))
         curve.append({"threshold": t, "recall": mt["recall"], "precision": mt["precision"]})
 
+    # Top pesos (interpretabilidade)
     nomes = np.array(vec.get_feature_names_out())
     pesos = modelo.coef_[0]
     ordem = np.argsort(pesos)
@@ -395,20 +397,53 @@ def render_app() -> None:
     st.title("🛡️ Lab Interativo — Demo 1: Detector de URLs Maliciosas")
     st.caption(
         "Baseado na Aula 1 (MBA Cyber Security — FIAP). "
-        "No celular, toque em `>>` no canto superior esquerdo para abrir todos os parâmetros."
+        "Escolha um Preset abaixo ou abra **⚙️ Personalizar Parâmetros** para testar combinações."
     )
 
+    # Detecta qual preset corresponde aos parâmetros atuais
+    cur_cfg = (
+        st.session_state.analyzer,
+        int(st.session_state.ngram_min),
+        int(st.session_state.ngram_max),
+        bool(st.session_state.balanced),
+        bool(st.session_state.clean_url),
+        bool(st.session_state.dedup),
+    )
+    active_preset = None
+    if cur_cfg == ("word", 1, 1, False, True, True):
+        active_preset = 1
+    elif cur_cfg == ("word", 1, 1, True, True, True):
+        active_preset = 2
+    elif cur_cfg == ("char", 2, 4, True, True, True):
+        active_preset = 3
+
+    # Presets no topo + Glossário (destaque dinâmico no preset ativo!)
     p1, p2, p3, p4 = st.columns([1.2, 1.3, 1.5, 1.2])
     with p1:
-        if st.button("Preset 1: Base (palavras)", use_container_width=True, help="Modelo inicial da Demo 1: palavras inteiras e sem balanceamento. Acurácia alta, mas deixa passar muitos ataques."):
+        if st.button(
+            "Preset 1: Base (palavras)",
+            use_container_width=True,
+            type="primary" if active_preset == 1 else "secondary",
+            help="Modelo inicial da Demo 1: palavras inteiras e sem balanceamento. Acurácia alta, mas deixa passar muitos ataques.",
+        ):
             apply_preset(1)
             st.rerun()
     with p2:
-        if st.button("Preset 2: + Balanceado (A)", use_container_width=True, help="Ativa class_weight='balanced' para dar mais peso aos ataques durante o treino."):
+        if st.button(
+            "Preset 2: + Balanceado (A)",
+            use_container_width=True,
+            type="primary" if active_preset == 2 else "secondary",
+            help="Ativa class_weight='balanced' para dar mais peso aos ataques durante o treino.",
+        ):
             apply_preset(2)
             st.rerun()
     with p3:
-        if st.button("Preset 3: + N-gramas 2–4 chars (A+B)", use_container_width=True, type="primary", help="Melhor modelo da Demo 1: quebra URLs em pedaços de 2 a 4 letras + pesos balanceados."):
+        if st.button(
+            "Preset 3: + N-gramas 2–4 chars (A+B)",
+            use_container_width=True,
+            type="primary" if active_preset == 3 else "secondary",
+            help="Melhor modelo da Demo 1: quebra URLs em pedaços de 2 a 4 letras + pesos balanceados.",
+        ):
             apply_preset(3)
             st.rerun()
     with p4:
@@ -426,84 +461,89 @@ def render_app() -> None:
         g7.info("**TF-IDF**\n\nTransforma texto em números, dando peso maior a palavras/pedaços raros e distintivos.")
         g8.info("**Regressão Logística**\n\nModelo transparente que soma pesos de cada pedaço da URL para calcular o risco (0–100%).")
 
-    with st.sidebar:
-        st.header("Parâmetros do Experimento")
+    # Painel de parâmetros direto na página principal (visível e fácil de usar no celular e no desktop!)
+    with st.expander("⚙️ Personalizar Parâmetros (Dados, TF-IDF e Regressão Logística)", expanded=False):
+        col_d, col_v, col_m = st.columns(3)
 
-        st.subheader("1. Dados & Pré-processamento")
-        sample_size = st.select_slider(
-            "Tamanho da amostra",
-            options=[20000, 50000, 100000, 150000],
-            key="sample_size",
-            format_func=lambda x: f"{x // 1000}k URLs",
-            help="Quantas URLs da base usar no treino+teste. 50k é rápido (~2s) e excelente para experimentar.",
-        )
-        clean_url = st.checkbox(
-            "Padronizar URL (http/https/www)",
-            key="clean_url",
-            help="Deixa tudo minúsculo e remove http://, https://, www. e barra final para evitar atalhos artificiais.",
-        )
-        dedup = st.checkbox(
-            "Remover URLs duplicadas",
-            key="dedup",
-            help="Evita que a mesma URL caia no treino e no teste ('colar na prova') inflando a nota.",
-        )
-        stratify = st.checkbox(
-            "Divisão estratificada",
-            key="stratify",
-            help="Mantém a mesma proporção (~15%) de URLs maliciosas no treino e no teste.",
-        )
-        test_size = st.slider(
-            "Proporção de teste",
-            0.10, 0.40, step=0.05, key="test_size",
-            help="Fatia escondida do modelo para a 'prova final' (padrão: 20%, regra 80/20).",
-        )
-        seed = st.number_input(
-            "Seed (semente aleatória)",
-            min_value=0, max_value=9999, step=1, key="seed",
-            help="Fixa o sorteio para que repetir o experimento dê sempre o mesmo resultado.",
-        )
+        with col_d:
+            st.markdown("**1. Dados & Pré-processamento**")
+            sample_size = st.select_slider(
+                "Tamanho da amostra",
+                options=[20000, 50000, 100000, 150000],
+                key="sample_size",
+                format_func=lambda x: f"{x // 1000}k URLs",
+                help="Quantas URLs da base usar no treino+teste. 50k é rápido (~2s) e excelente para experimentar.",
+            )
+            clean_url = st.checkbox(
+                "Padronizar URL (http/https/www)",
+                key="clean_url",
+                help="Deixa tudo minúsculo e remove http://, https://, www. e barra final para evitar atalhos artificiais.",
+            )
+            dedup = st.checkbox(
+                "Remover URLs duplicadas",
+                key="dedup",
+                help="Evita que a mesma URL caia no treino e no teste ('colar na prova') inflando a nota.",
+            )
+            stratify = st.checkbox(
+                "Divisão estratificada",
+                key="stratify",
+                help="Mantém a mesma proporção (~15%) de URLs maliciosas no treino e no teste.",
+            )
+            test_size = st.slider(
+                "Proporção de teste",
+                0.10, 0.40, step=0.05, key="test_size",
+                help="Fatia escondida do modelo para a 'prova final' (padrão: 20%, regra 80/20).",
+            )
+            seed = st.number_input(
+                "Seed (semente aleatória)",
+                min_value=0, max_value=9999, step=1, key="seed",
+                help="Fixa o sorteio para que repetir o experimento dê sempre o mesmo resultado.",
+            )
 
-        st.subheader("2. Vetorização (TF-IDF)")
-        analyzer = st.selectbox(
-            "Analisador (como quebra a URL)",
-            options=["word", "char", "char_wb"],
-            key="analyzer",
-            help="'word' olha palavras inteiras; 'char' olha pedaços de letras (captura truques como paypa1 e amaz0n).",
-        )
-        c1, c2 = st.columns(2)
-        ngram_min = c1.number_input(
-            "N-gram mín", min_value=1, max_value=5, key="ngram_min",
-            help="Menor tamanho de pedaço extraído (ex.: 2 em char gera pares de letras).",
-        )
-        ngram_max = c2.number_input(
-            "N-gram máx", min_value=int(ngram_min), max_value=5,
-            value=max(int(ngram_min), int(st.session_state.ngram_max)),
-            key="ngram_max",
-            help="Maior tamanho de pedaço extraído (ex.: 2 a 4 cria blocos de 2, 3 e 4 letras).",
-        )
-        max_features = st.slider(
-            "Vocabulário máximo",
-            10000, 150000, step=10000, key="max_features",
-            help="Limite de pedaços/palavras diferentes memorizados pelo TF-IDF.",
-        )
-        sublinear_tf = st.checkbox(
-            "sublinear_tf (escala log)",
-            key="sublinear_tf",
-            help="Usa escala logarítmica na repetição de um mesmo pedaço dentro da URL.",
-        )
+        with col_v:
+            st.markdown("**2. Vetorização (TF-IDF)**")
+            analyzer = st.selectbox(
+                "Analisador (como quebra a URL)",
+                options=["word", "char", "char_wb"],
+                key="analyzer",
+                help="'word' olha palavras inteiras; 'char' olha pedaços de letras (captura truques como paypa1 e amaz0n).",
+            )
+            c1, c2 = st.columns(2)
+            ngram_min = c1.number_input(
+                "N-gram mín", min_value=1, max_value=5, key="ngram_min",
+                help="Menor tamanho de pedaço extraído (ex.: 2 em char gera pares de letras).",
+            )
+            ngram_max = c2.number_input(
+                "N-gram máx", min_value=int(ngram_min), max_value=5,
+                value=max(int(ngram_min), int(st.session_state.ngram_max)),
+                key="ngram_max",
+                help="Maior tamanho de pedaço extraído (ex.: 2 a 4 cria blocos de 2, 3 e 4 letras).",
+            )
+            max_features = st.slider(
+                "Vocabulário máximo",
+                10000, 150000, step=10000, key="max_features",
+                help="Limite de pedaços/palavras diferentes memorizados pelo TF-IDF.",
+            )
+            sublinear_tf = st.checkbox(
+                "sublinear_tf (escala log)",
+                key="sublinear_tf",
+                help="Usa escala logarítmica na repetição de um mesmo pedaço dentro da URL.",
+            )
 
-        st.subheader("3. Regressão Logística")
-        balanced = st.checkbox(
-            'class_weight="balanced"',
-            key="balanced",
-            help="Faz errar um ataque (classe rara, ~15%) pesar ~5,5x mais no treino. Sobe o Recall, mas aumenta FP.",
-        )
-        c_val = st.slider(
-            "Regularização (C)",
-            0.1, 10.0, step=0.1, key="c_val",
-            help="Menor C = modelo mais conservador; maior C = ajusta mais forte aos dados de treino.",
-        )
+        with col_m:
+            st.markdown("**3. Regressão Logística**")
+            balanced = st.checkbox(
+                'class_weight="balanced"',
+                key="balanced",
+                help="Faz errar um ataque (classe rara, ~15%) pesar ~5,5x mais no treino. Sobe o Recall, mas aumenta FP.",
+            )
+            c_val = st.slider(
+                "Regularização (C)",
+                0.1, 10.0, step=0.1, key="c_val",
+                help="Menor C = modelo mais conservador; maior C = ajusta mais forte aos dados de treino.",
+            )
 
+    # Treina (com cache automático para parâmetros idênticos!)
     result = train_model_cached(
         sample_size=int(sample_size),
         clean_url=bool(clean_url),
@@ -528,6 +568,7 @@ def render_app() -> None:
         f"Vocabulário: **{result['vocab_size']:,}** features · Tempo: **{result['elapsed_sec']}s**"
     )
 
+    # Controle de limiar em tempo real (sem retreinar!)
     threshold = st.slider(
         "Limiar de Decisão (Threshold) em Tempo Real — arraste sem retreinar!",
         min_value=0.05, max_value=0.99, step=0.01, key="threshold",
@@ -539,6 +580,7 @@ def render_app() -> None:
     m = compute_metrics(y_test, (probs_test >= threshold).astype(int))
     base = result["baseline"]
 
+    # Registra no histórico da sessão quando mudar a configuração de treino
     sig = (sample_size, clean_url, dedup, stratify, test_size, seed, analyzer, ngram_min, ngram_max, max_features, sublinear_tf, balanced, c_val)
     if st.session_state.last_sig != sig:
         st.session_state.last_sig = sig
@@ -553,6 +595,7 @@ def render_app() -> None:
         })
         st.session_state.history = st.session_state.history[:12]
 
+    # KPIs principais em grade compacta responsiva (2x3 no mobile, 3x2 no tablet, 6x1 no desktop)
     st.markdown(
         f"""
         <div class="kpi-grid">
@@ -591,6 +634,7 @@ def render_app() -> None:
         unsafe_allow_html=True,
     )
 
+    # Leitura didática automática
     notes = []
     warn = False
     if not dedup:
@@ -618,6 +662,7 @@ def render_app() -> None:
     else:
         st.success("**Leitura rápida:** " + " ".join(notes))
 
+    # Matriz de Confusão + Curva de Trade-off
     col_cm, col_cv = st.columns(2)
     with col_cm:
         st.subheader("Matriz de Confusão (Teste)")
@@ -626,6 +671,7 @@ def render_app() -> None:
         st.subheader("Trade-off por Limiar (Recall × Precision)")
         st.pyplot(plot_tradeoff_curve(result["curve"], threshold), use_container_width=True)
 
+    # Raio-X do modelo
     st.subheader("Olhando por dentro: o que o modelo aprendeu?")
     w1, w2 = st.columns(2)
     with w1:
@@ -635,6 +681,7 @@ def render_app() -> None:
         st.markdown("**Top sinais que puxam para LEGÍTIMO** *(pesos negativos)*")
         st.dataframe(result["top_leg"], hide_index=True, use_container_width=True)
 
+    # Testador Ao Vivo com Explicabilidade
     st.subheader("Testador Ao Vivo + Por que o modelo decidiu assim?")
     user_url = st.text_input(
         "Digite qualquer URL (real ou inventada) para testar:",
@@ -664,6 +711,7 @@ def render_app() -> None:
             else:
                 st.caption("Nenhum sinal legítimo reconhecido.")
 
+    # Amostra rápida + Histórico
     with st.expander("Amostra rápida de URLs (atualiza com o limiar)", expanded=True):
         rows = []
         for url, real in PRESET_URLS:
