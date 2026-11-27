@@ -444,40 +444,44 @@ def render_app() -> None:
     elif cur_cfg == ("char", 2, 4, True, True, True):
         active_preset = 3
 
-    # Presets no topo + Glossário (destaque dinâmico no preset ativo!)
+    # Presets no topo + Glossário (on_click evita duplo rerun e "fantasma" dos botões!)
     p1, p2, p3, p4 = st.columns([1.2, 1.3, 1.5, 1.2])
     with p1:
-        if st.button(
+        st.button(
             "Preset 1: Base (palavras)",
+            key="btn_preset_1",
             use_container_width=True,
             type="primary" if active_preset == 1 else "secondary",
+            on_click=apply_preset,
+            args=(1,),
             help="Modelo inicial da Demo 1: palavras inteiras e sem balanceamento. Acurácia alta, mas deixa passar muitos ataques.",
-        ):
-            apply_preset(1)
-            st.rerun()
+        )
     with p2:
-        if st.button(
+        st.button(
             "Preset 2: + Balanceado (A)",
+            key="btn_preset_2",
             use_container_width=True,
             type="primary" if active_preset == 2 else "secondary",
+            on_click=apply_preset,
+            args=(2,),
             help="Ativa class_weight='balanced' para dar mais peso aos ataques durante o treino.",
-        ):
-            apply_preset(2)
-            st.rerun()
+        )
     with p3:
-        if st.button(
+        st.button(
             "Preset 3: + N-gramas 2–4 chars (A+B)",
+            key="btn_preset_3",
             use_container_width=True,
             type="primary" if active_preset == 3 else "secondary",
+            on_click=apply_preset,
+            args=(3,),
             help="Melhor modelo da Demo 1: quebra URLs em pedaços de 2 a 4 letras + pesos balanceados.",
-        ):
-            apply_preset(3)
-            st.rerun()
+        )
     with p4:
-        show_glossary = st.toggle("Glossário Rápido", value=False, help="Mostra um resumo dos 8 termos principais usados nesta demo.")
+        show_glossary = st.toggle("Glossário Rápido", key="toggle_glossary", value=False, help="Mostra um resumo dos 8 termos principais usados nesta demo.")
 
+    glossary_slot = st.empty()
     if show_glossary:
-        st.markdown(
+        glossary_slot.markdown(
             """
             <div class="gloss-grid">
               <div class="gloss-card"><strong>Acurácia</strong>% de acertos totais. Engana em base desbalanceada (dizer "legítimo" para tudo já dá ~85%).</div>
